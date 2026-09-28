@@ -1,0 +1,64 @@
+import js from '@eslint/js';
+import tseslint from 'typescript-eslint';
+import react from 'eslint-plugin-react';
+import reactHooks from 'eslint-plugin-react-hooks';
+import importPlugin from 'eslint-plugin-import';
+
+export default tseslint.config(
+  { ignores: ['dist/', 'node_modules/', 'android/', 'ios/', 'src-tauri/', 'api/', 'public/', 'scripts/', 'tailwind.config.js', 'postcss.config.js'] },
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ['**/*.{ts,tsx}'],
+    plugins: {
+      react,
+      'react-hooks': reactHooks,
+      import: importPlugin,
+    },
+    languageOptions: {
+      parserOptions: {
+        ecmaFeatures: { jsx: true },
+      },
+    },
+    settings: {
+      react: { version: 'detect' },
+    },
+    rules: {
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
+      '@typescript-eslint/no-explicit-any': 'warn',
+      '@typescript-eslint/consistent-type-imports': 'error',
+      '@typescript-eslint/no-empty-object-type': 'off',
+      'react/react-in-jsx-scope': 'off',
+      'react/prop-types': 'off',
+      'react-hooks/rules-of-hooks': 'error',
+      'react-hooks/exhaustive-deps': 'warn',
+    },
+  },
+  // Pure core: no React, Dexie, Firebase, or Capacitor imports.
+  // These files are required to stay pure TypeScript so they can run
+  // in tests, on the server, and inside the React Native shim.
+  {
+    files: ['src/core/engine/**', 'src/core/time/**'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            { name: 'react', message: 'Pure core files must not import React' },
+            { name: 'dexie', message: 'Pure core files must not import Dexie' },
+            { name: 'firebase', message: 'Pure core files must not import Firebase' },
+          ],
+          patterns: [
+            { group: ['@capacitor/*'], message: 'Pure core files must not import Capacitor' },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    files: ['tests/**/*', '**/*.test.ts', '**/*.test.tsx'],
+    rules: {
+      '@typescript-eslint/no-explicit-any': 'off',
+    },
+  },
+);

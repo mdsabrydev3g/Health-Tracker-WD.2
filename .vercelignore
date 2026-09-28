@@ -1,0 +1,13 @@
+# Vercel — exclude everything Vercel doesn't need for the build
+node_modules
+.cache
+.git
+.gitignore
+.vercel
+coverage
+playwright-report
+test-results
+
+# Local docs only; they're still in git
+# But exclude workbuddy's local memory dir
+.workbuddy-ai/memory

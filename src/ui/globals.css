@@ -1,0 +1,141 @@
+@import '@fontsource/cairo/400.css';
+@import '@fontsource/cairo/600.css';
+@import '@fontsource/cairo/700.css';
+@import '@fontsource/cairo/800.css';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 200 15% 12%;
+    --card: 0 0% 100%;
+    --card-foreground: 200 15% 12%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 200 15% 12%;
+    --primary: 174 84% 26%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 174 30% 95%;
+    --secondary-foreground: 174 84% 20%;
+    --muted: 200 16% 96%;
+    --muted-foreground: 200 10% 42%;
+    --accent: 174 40% 93%;
+    --accent-foreground: 174 84% 20%;
+    --destructive: 0 74% 46%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 62% 34%;
+    --success-foreground: 0 0% 100%;
+    --warning: 32 92% 44%;
+    --warning-foreground: 0 0% 100%;
+    --border: 200 16% 89%;
+    --input: 200 16% 89%;
+    --ring: 174 84% 34%;
+    --radius: 0.9rem;
+  }
+
+  .dark {
+    --background: 200 20% 8%;
+    --foreground: 0 0% 96%;
+    --card: 200 18% 12%;
+    --card-foreground: 0 0% 96%;
+    --popover: 200 18% 12%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 174 62% 44%;
+    --primary-foreground: 200 30% 8%;
+    --secondary: 200 16% 20%;
+    --secondary-foreground: 0 0% 96%;
+    --muted: 200 16% 18%;
+    --muted-foreground: 200 10% 68%;
+    --accent: 200 16% 22%;
+    --accent-foreground: 0 0% 96%;
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+    --success: 145 50% 44%;
+    --success-foreground: 200 30% 8%;
+    --warning: 32 84% 52%;
+    --warning-foreground: 200 30% 8%;
+    --border: 200 14% 24%;
+    --input: 200 14% 24%;
+    --ring: 174 62% 52%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Cairo', system-ui, 'Segoe UI', Tahoma, sans-serif;
+    /* Respect iOS safe areas in standalone mode. */
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Large-text mode (§14): ≥20px body, ≥24px buttons. */
+  html.large-text {
+    font-size: 20px;
+  }
+  html.large-text button,
+  html.large-text .btn-large {
+    font-size: 1.15rem;
+    min-height: 64px;
+  }
+
+  /* Minimum 48x48dp touch targets everywhere (§14). */
+  button,
+  a[role='button'],
+  [role='button'] {
+    min-height: 48px;
+  }
+
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .dose-card-giant {
+    @apply rounded-3xl border-2 p-6 text-center shadow-sm;
+  }
+
+  .stat-tile {
+    @apply rounded-2xl border bg-card p-4 text-center;
+  }
+
+  .bottom-nav {
+    @apply fixed inset-x-0 bottom-0 z-40 border-t bg-card/95 backdrop-blur;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  .safe-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .numeric {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum';
+  }
+}
+
+@layer utilities {
+  .text-balance {
+    text-wrap: balance;
+  }
+}

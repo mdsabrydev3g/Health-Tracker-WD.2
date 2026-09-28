@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "target": "es2020",
+    "module": "esnext",
+    "moduleResolution": "bundler",
+    "noEmit": true,
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "types": ["@vercel/node", "vite/client"],
+    "paths": { "@/*": ["../src/*"] },
+    "baseUrl": "."
+  },
+  "include": ["./**/*.ts", "../src/core/**/*.ts"]
+}

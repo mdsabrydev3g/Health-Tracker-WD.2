@@ -1,0 +1,23 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "framework": "vite",
+  "rewrites": [
+    { "source": "/api/health", "destination": "/api/src/health" },
+    { "source": "/api/sync/push", "destination": "/api/src/sync-push" },
+    { "source": "/api/sync/pull", "destination": "/api/src/sync-pull" },
+    { "source": "/api/ai/summarise", "destination": "/api/src/ai-summarise" },
+    { "source": "/api/ai/scan", "destination": "/api/src/ai-scan" },
+    { "source": "/api/backup", "destination": "/api/src/backup" }
+  ],
+  "crons": [
+    {
+      "path": "/api/backup",
+      "schedule": "0 2 * * *"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "production"
+  }
+}
