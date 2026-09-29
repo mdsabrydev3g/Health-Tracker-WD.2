@@ -40,6 +40,11 @@ export default defineConfig({
   ],
   resolve: {
     alias: { '@': path.resolve(__dirname, './src') },
+    // Same list as Vite's default but with TypeScript ahead of JavaScript.
+    // Vite resolves .js before .ts, so a stale emitted .js sitting next to a
+    // .ts source silently shadows it and ships old code. Preferring .ts/.tsx
+    // keeps the TypeScript files authoritative.
+    extensions: ['.mjs', '.mts', '.ts', '.tsx', '.jsx', '.js', '.json'],
   },
   server: { port: 5173, host: true },
   build: {

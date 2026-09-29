@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom';
 import { useApp } from './store';
 import { ErrorBoundary } from './ErrorBoundary';
-import { useAppearance, useForegroundRefresh } from './useAppearance';
+import { useAppearance, useForegroundRefresh, useNativeStatusBar } from './useAppearance';
 import { CaregiverShell } from '@/modes/caregiver/CaregiverShell';
 import { MotherShell } from '@/modes/mother/MotherShell';
 import { Onboarding } from '@/features/onboarding/Onboarding';
@@ -32,6 +32,7 @@ export function App() {
   const onboardingDone = useApp((s) => s.settings.activePersonId);
 
   useAppearance();
+  useNativeStatusBar();
   useForegroundRefresh(() => void refresh());
 
   useEffect(() => {

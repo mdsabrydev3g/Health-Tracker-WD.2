@@ -156,6 +156,121 @@ export async function checkAlarmHealth(api: NativeAlarmApi | null): Promise<Alar
   };
 }
 
+/**
+ * Sentinel returned when a native call did not settle in time. Distinct from
+ * `null` because "no native api" is a legitimate, non-error result.
+ */
+const TIMED_OUT = Symbol('timed-out');
+
+async function raceTimeout<T>(promise: Promise<T>, ms: number): Promise<T | typeof TIMED_OUT> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<typeof TIMED_OUT>((resolve) => {
+    timer = setTimeout(() => resolve(TIMED_OUT), ms);
+  });
+  try {
+    return await Promise.race([promise, guard]);
+  } catch {
+    // A rejected plugin call is still an answer we can act on.
+    return TIMED_OUT;
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+/**
+ * Resolve the native api and read alarm health, but never hang.
+ *
+ * Capacitor bridge calls can stay pending forever when the plugin is missing or
+ * the native side never answers — that is what left the UI stuck on
+ * "جارٍ الفحص…" with no way out. Returns null when the state is unknown, so the
+ * caller can stop the spinner and keep the previous value instead of lying.
+ */
+export async function refreshAlarmHealth(ms = 6000): Promise<AlarmHealth | null> {
+  const apiResult = await raceTimeout(getNativeAlarmApi(), ms);
+  if (apiResult === TIMED_OUT) return null;
+
+  const api = apiResult as NativeAlarmApi | null;
+  const health = await raceTimeout(checkAlarmHealth(api), ms);
+  if (health === TIMED_OUT) return null;
+  return health as AlarmHealth;
+}
+
+export interface PermissionRequestResult {
+  notifGranted: boolean;
+  exactAlarmGranted: boolean;
+  batteryExempt: boolean;
+  cameraGranted: boolean;
+}
+
+/**
+ * Ask for everything the app needs, the way any normal app does: the OS shows
+ * its own Allow dialog and the user picks. Covers notifications, the exact
+ * alarm needed for on-time dose reminders, battery exemption, and the camera
+ * used to scan medication packages.
+ */
+export async function requestRuntimePermissions(): Promise<PermissionRequestResult> {
+  let notifGranted = false;
+
+  // Web / WebView notification permission.
+  try {
+    if (typeof Notification !== 'undefined') {
+      if (Notification.permission === 'granted') {
+        notifGranted = true;
+      } else {
+        notifGranted = (await Notification.requestPermission()) === 'granted';
+      }
+    }
+  } catch {
+    notifGranted = false;
+  }
+
+  // Native (Android) notifications + exact alarm + battery exemption.
+  const api = await raceTimeout(getNativeAlarmApi(), 6000);
+  if (api !== TIMED_OUT && api) {
+    const native = api as NativeAlarmApi;
+    try {
+      const perms = await native.requestPermissions();
+      if (perms?.display === 'granted') notifGranted = true;
+    } catch {
+      /* user dismissed the OS dialog */
+    }
+    if (native.requestExactAlarmPermission) {
+      try {
+        await native.requestExactAlarmPermission();
+      } catch {
+        /* not supported on this OS version */
+      }
+    }
+    if (native.requestBatteryOptimizationExemption) {
+      try {
+        await native.requestBatteryOptimizationExemption();
+      } catch {
+        /* not supported on this OS version */
+      }
+    }
+  }
+
+  // Camera: opening a stream is what makes Android show its Allow dialog.
+  let cameraGranted = false;
+  try {
+    if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      cameraGranted = true;
+      stream.getTracks().forEach((t) => t.stop());
+    }
+  } catch {
+    cameraGranted = false;
+  }
+
+  const health = await refreshAlarmHealth();
+  return {
+    notifGranted: health?.notifGranted ?? notifGranted,
+    exactAlarmGranted: health?.exactAlarmGranted ?? false,
+    batteryExempt: health?.batteryExempt ?? false,
+    cameraGranted,
+  };
+}
+
 export interface AlarmHealthIssue {
   key: 'notifGranted' | 'exactAlarmGranted' | 'batteryExempt' | 'staleReschedule';
   messageAr: string;

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BellRing,
   BatteryCharging,
@@ -21,9 +21,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Switch } from '@/ui/switch';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog';
 import {
-  checkAlarmHealth,
   describeAlarmHealthIssues,
-  getNativeAlarmApi,
+  refreshAlarmHealth,
+  requestRuntimePermissions,
 } from '@/core/notify/scheduler';
 import { setCaregiverPin } from '@/modes/mother/CaregiverPinDialog';
 
@@ -39,15 +39,17 @@ export function Settings() {
   const [newPin, setNewPin] = useState('');
   const [pinConfirm, setPinConfirm] = useState('');
   const [checking, setChecking] = useState(false);
+  const [requesting, setRequesting] = useState(false);
 
   const issues = device?.alarmHealth ? describeAlarmHealthIssues(device.alarmHealth) : [];
 
-  const recheck = async () => {
+  const recheck = useCallback(async () => {
     setChecking(true);
     try {
-      const api = await getNativeAlarmApi();
-      const health = await checkAlarmHealth(api);
-      if (device) {
+      // null = could not be determined in time. Keep the previous value rather
+      // than storing a wrong one, and always clear the spinner.
+      const health = await refreshAlarmHealth();
+      if (device && health) {
         await repo.putDevice({
           ...device,
           alarmHealth: health,
@@ -59,7 +61,35 @@ export function Settings() {
     } finally {
       setChecking(false);
     }
+  }, [device, repo]);
+
+  const allow = async () => {
+    setRequesting(true);
+    try {
+      await requestRuntimePermissions();
+      await recheck();
+    } finally {
+      setRequesting(false);
+    }
   };
+
+  // Keep the latest recheck reachable from a listener registered once.
+  const recheckRef = useRef(recheck);
+  recheckRef.current = recheck;
+
+  // Returning from the phone's own settings used to look like it changed
+  // nothing. Re-read the permissions whenever the app comes back to front.
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === 'visible') void recheckRef.current();
+    };
+    document.addEventListener('visibilitychange', handler);
+    window.addEventListener('focus', handler);
+    return () => {
+      document.removeEventListener('visibilitychange', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, []);
 
   useEffect(() => {
     if (!device?.alarmHealth?.lastRescheduleAtUtc) void recheck();
@@ -87,9 +117,14 @@ export function Settings() {
               <BellRing className="h-4 w-4 text-primary" />
               حالة التذكيرات
             </p>
-            <Button size="sm" variant="outline" disabled={checking} onClick={() => void recheck()}>
-              {checking ? 'جارٍ الفحص…' : 'فحص الآن'}
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" disabled={checking} onClick={() => void recheck()}>
+                {checking ? 'جارٍ الفحص…' : 'فحص الآن'}
+              </Button>
+              <Button size="sm" disabled={requesting || checking} onClick={() => void allow()}>
+                {requesting ? 'جارٍ الطلب…' : 'السماح'}
+              </Button>
+            </div>
           </div>
 
           {device?.alarmHealth && (
