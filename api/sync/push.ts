@@ -12,7 +12,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../lib/db';
 import { applyMutation } from '../lib/sync';
-import type { SyncEnvelope } from '@/core/db/schema';
+import type { SyncEnvelope } from '../../src/core/db/schema';
 
 interface Mutation {
   entity: string;

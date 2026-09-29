@@ -6,7 +6,7 @@
  * when it receives a batch of mutations.
  */
 
-import type { SyncEnvelope } from '@/core/db/schema';
+import type { SyncEnvelope } from '../../src/core/db/schema';
 
 export type ConflictDecision =
   | { kind: 'takeLocal' }
