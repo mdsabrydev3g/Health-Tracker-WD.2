@@ -60,3 +60,6 @@ Thumbs.db
 vitest.config.ts.timestamp-*.mjs
 
 .vercel
+
+# Built APKs (large binaries — not tracked)
+*.apk
