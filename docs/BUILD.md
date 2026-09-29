@@ -32,12 +32,36 @@ npm run test
 # Integration tests (Dexie adapter + fake-indexeddb)
 npx vitest run tests/integration/
 
+# Render smoke tests (mounts the real <App/> in jsdom)
+npx vitest run tests/render/
+
 # Type-check
 npm run typecheck
 
 # Lint
 npm run lint
 ```
+
+### End-to-end tests (Playwright)
+
+```bash
+npx playwright install --with-deps chromium
+npm run test:e2e
+```
+
+These drive the **real** app in a real browser against the production build
+(`vite preview` on `:4173`), so they cover what the unit/integration/render
+suites cannot: actual clicking, actual IndexedDB persistence across reloads,
+and the double-tap idempotency guarantee end to end.
+
+> **Requires a real browser environment.** Playwright's Chromium cannot run
+> inside a nested/containerised sandbox — it dies mid-test with
+> `Target page, context or browser has been closed`. `playwright.config.ts`
+> already passes `--no-sandbox --disable-setuid-sandbox
+> --disable-dev-shm-usage --disable-gpu`, which fixes the common CI case;
+> if it still crashes, run these on a normal desktop/CI runner rather than
+> assuming the app is broken. The `tests/render` suite is the environment-
+> independent substitute that always runs.
 
 ## Production Build
 

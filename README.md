@@ -36,9 +36,10 @@ npm run dev
 ## Tests
 
 ```bash
-npm run test        # 106 tests (unit + integration)
+npm run test        # 110 tests (unit + integration + render)
 npm run typecheck   # strict TypeScript
 npm run build       # production bundle
+npm run test:e2e    # Playwright — needs a real browser (see docs/BUILD.md)
 ```
 
 ## Project Structure
@@ -63,6 +64,8 @@ docs/
 tests/
   unit/           # 94 tests — dose, inventory, adherence, time
   integration/    # 12 tests — Dexie adapter, idempotency
+  render/         # 4 tests — mounts the real <App/> in jsdom
+  e2e/            # Playwright — real browser, real clicking
 ```
 
 ## License

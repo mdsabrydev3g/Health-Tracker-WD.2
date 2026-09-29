@@ -30,7 +30,20 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { ...devices['Desktop Chrome'] },
+      use: {
+        ...devices['Desktop Chrome'],
+        // Chromium's own sandbox cannot nest inside a container/CI sandbox
+        // and dies with "Target page, context or browser has been closed".
+        // These flags are the standard fix; they are also what CI needs.
+        launchOptions: {
+          args: [
+            '--no-sandbox',
+            '--disable-setuid-sandbox',
+            '--disable-dev-shm-usage',
+            '--disable-gpu',
+          ],
+        },
+      },
     },
   ],
   webServer: {
