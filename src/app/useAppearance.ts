@@ -93,3 +93,84 @@ export function useForegroundRefresh(onForeground: () => void): void {
     };
   }, [onForeground]);
 }
+
+/**
+ * Ask the OS for the permissions this app needs as soon as it runs on Android,
+ * the way every ordinary app does: the system shows its own Allow dialogs.
+ *
+ * Android 13+ will not show a reminder until POST_NOTIFICATIONS is granted,
+ * and the user cannot be expected to hunt for it in Settings. The plugin call
+ * itself triggers the system Allow dialog. We only fire once per install so a
+ * user who chose "Don't allow" is not nagged on every launch — the Settings
+ * screen and the in-app permission dialog stay available for a later change of
+ * mind.
+ *
+ * Camera is requested here too (at the user's request) so both dialogs appear
+ * on first run. Opening a MediaStream is what makes Android surface its
+ * camera Allow dialog; the track is stopped immediately, so nothing is
+ * recorded and no preview is shown.
+ */
+export function useStartupPermissions(): void {
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const cap = (
+          window as unknown as {
+            Capacitor?: { isNativePlatform?: () => boolean };
+          }
+        ).Capacitor;
+        if (!cap?.isNativePlatform?.()) return;
+
+        // Already answered (granted or denied) — never ask twice.
+        const askedKey = 'ht:perms:asked-at-startup';
+        try {
+          if (window.localStorage.getItem(askedKey) === '1') return;
+        } catch {
+          /* private mode — fall through and ask */
+        }
+
+        // Give React a beat to paint before native dialogs cover the screen.
+        await new Promise((r) => setTimeout(r, 800));
+        if (cancelled) return;
+
+        // 1. Notifications (+ the exact-alarm screen where the OS requires it).
+        try {
+          const mod = (await import('@capacitor/local-notifications')) as unknown as {
+            LocalNotifications?: {
+              requestPermissions?: () => Promise<{ display: string }>;
+              changeExactNotificationSetting?: () => Promise<unknown>;
+            };
+          };
+          await mod.LocalNotifications?.requestPermissions?.();
+        } catch {
+          /* plugin missing — the in-app dialog still offers a retry */
+        }
+
+        if (cancelled) return;
+
+        // 2. Camera. getUserMedia is the call Android gates behind its own
+        //    camera permission dialog.
+        try {
+          if (navigator.mediaDevices?.getUserMedia) {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach((t) => t.stop());
+          }
+        } catch {
+          /* user declined — scanning will re-ask when it is actually needed */
+        }
+
+        try {
+          window.localStorage.setItem(askedKey, '1');
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        /* never let a permission probe break startup */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+}

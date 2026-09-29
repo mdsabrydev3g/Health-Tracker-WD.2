@@ -21,7 +21,7 @@ import { AlertBanner } from '@/ui/primitives';
 import { Card, CardContent } from '@/ui/card';
 import { Button } from '@/ui/button';
 import { useApp } from '@/app/store';
-import { isSyncConfigured } from '@/core/sync/outbox';
+import { isCloudSyncConfigured } from '@/core/sync/cloudSync';
 import { readFileAsText, downloadJson } from '@/lib/utils';
 import type { PersonExport } from '@/core/db/repository';
 import { CURRENT_SCHEMA_VERSION } from '@/core/db/repository';
@@ -98,14 +98,14 @@ export function More() {
       </Card>
 
       <AlertBanner
-        tone={isSyncConfigured() ? 'success' : 'info'}
-        title={isSyncConfigured() ? 'المزامنة السحابية مُفعّلة' : 'المزامنة السحابية غير مُفعّلة'}
+        tone={isCloudSyncConfigured() ? 'success' : 'info'}
+        title={isCloudSyncConfigured() ? 'المزامنة السحابية مُفعّلة' : 'المزامنة السحابية غير مُفعّلة'}
         icon={<CloudUpload className="h-5 w-5" />}
       >
         <p>
-          {isSyncConfigured()
+          {isCloudSyncConfigured()
             ? 'تُرفع التغييرات تلقائياً عند توفر الإنترنت.'
-            : 'التطبيق يعمل بالكامل بدون إنترنت. لإضافة المزامنة، أضف إعدادات Firebase في متغيرات البيئة.'}
+            : 'التطبيق يعمل بالكامل بدون إنترنت. لم يتم ضبط عنوان المزامنة السحابية بعد.'}
         </p>
       </AlertBanner>
 

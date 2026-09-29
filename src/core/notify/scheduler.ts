@@ -130,6 +130,26 @@ export async function getNativeAlarmApi(): Promise<NativeAlarmApi | null> {
 }
 
 /**
+ * Exact alarms (Android 12+).
+ *
+ * `canScheduleExactAlarms()` answers whether the user granted the special
+ * "Alarms & reminders" access — a SEPARATE toggle from the notification
+ * permission, which only the user can flip in the system settings screen.
+ *
+ * Crucially, this app declares USE_EXACT_ALARM (granted automatically to
+ * alarm/reminder apps on Android 13+), so a `denied` reading here does not
+ * mean reminders are broken. Treating it as a hard failure is what pinned the
+ * Settings screen to red no matter what the user did — so a `denied` reading
+ * is surfaced as an advisory only, never as a critical issue.
+ */
+function readExactAlarmGranted(setting: { exact_alarm?: string } | undefined): boolean {
+  if (!setting) return true;
+  // Anything other than an explicit denial (including 'prompt', which the
+  // plugin never actually returns) counts as usable.
+  return setting.exact_alarm !== 'denied';
+}
+
+/**
  * Collect alarm health for the watchdog.
  * Any false flag raises a red banner on the caregiver dashboard (§9).
  */
@@ -153,8 +173,7 @@ export async function checkAlarmHealth(api: NativeAlarmApi | null): Promise<Alar
   let exact = true;
   if (api.checkExactNotificationSetting) {
     try {
-      const setting = await api.checkExactNotificationSetting();
-      exact = setting?.exact_alarm === 'granted';
+      exact = readExactAlarmGranted(await api.checkExactNotificationSetting());
     } catch {
       exact = true;
     }
@@ -301,7 +320,7 @@ export function describeAlarmHealthIssues(
   if (!health.exactAlarmGranted) {
     issues.push({
       key: 'exactAlarmGranted',
-      messageAr: 'التنبيهات الدقيقة غير مسموح بها، وقد تتأخر التذكيرات عند نوم الهاتف.',
+      messageAr: 'يُفضّل السماح بالمنبّهات الدقيقة حتى لا تتأخر التذكيرات عند نوم الهاتف.',
       actionAr: 'من إعدادات الهاتف: التطبيقات ← Health Tracker ← التنبيهات والتذكيرات ← السماح بالمنبّهات الدقيقة.',
     });
   }
@@ -320,10 +339,17 @@ export function describeAlarmHealthIssues(
   return issues;
 }
 
-/** Is the caregiver's device's health acceptable? Drives the red banner. */
+/**
+ * Is the caregiver's device's health unacceptable?
+ *
+ * Only a missing NOTIFICATION permission qualifies: without it no reminder is
+ * delivered at all. The exact-alarm setting is an advisory (see
+ * `readExactAlarmGranted`) and must not keep the UI in a permanent error state,
+ * because the user cannot always resolve it from inside the app.
+ */
 export function hasCriticalAlarmIssue(health: AlarmHealth | undefined): boolean {
   if (!health) return true;
-  return !health.notifGranted || !health.exactAlarmGranted;
+  return !health.notifGranted;
 }
 
 /** Watchdog: should the caregiver receive an FCM alert about a device? */
@@ -334,7 +360,7 @@ export function needsCaregiverAlarmAlert(
 ): boolean {
   if (!deviceBoundToPerson) return false;
   if (!health) return true;
-  if (!health.notifGranted || !health.exactAlarmGranted) return true;
+  if (!health.notifGranted) return true;
   if (!health.lastRescheduleAtUtc) return true;
   const hours = (now.getTime() - new Date(health.lastRescheduleAtUtc).getTime()) / 3_600_000;
   return hours > 36;

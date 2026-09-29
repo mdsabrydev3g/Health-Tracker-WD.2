@@ -46,26 +46,68 @@ const DEVICE_ID_KEY = 'health-tracker.device-id';
 const LAST_PUSH_KEY = 'health-tracker.last-push-at';
 const TOKEN_KEY = 'health-tracker.sync-token';
 
-/** Base URL of the sync API. Defaults to the same origin (works on Vercel). */
-export function syncBaseUrl(): string {
+/**
+ * Are we inside the Capacitor native shell (the Android APK)?
+ *
+ * This matters because the APK's WebView serves the bundled assets from
+ * `https://localhost` — the same hostname a developer laptop uses for `vite
+ * dev`. Any logic that branches on the hostname alone therefore treats the
+ * phone exactly like a dev machine, which is how sync ended up permanently
+ * disabled in the app.
+ */
+export function isNativeShell(): boolean {
+  if (typeof window === 'undefined') return false;
+  const cap = (window as unknown as Record<string, unknown>)['Capacitor'] as
+    | { isNativePlatform?: () => boolean }
+    | undefined;
+  try {
+    return cap?.isNativePlatform?.() === true;
+  } catch {
+    return false;
+  }
+}
+
+/** The absolute API base URL, or `null` when only a relative one is known. */
+function configuredSyncBase(): string | null {
   const env = import.meta.env as Record<string, string | undefined>;
-  const base = env['VITE_SYNC_BASE_URL'] ?? '/api';
-  return base.replace(/\/$/, '');
+  const raw = env['VITE_SYNC_BASE_URL']?.trim();
+  return raw ? raw.replace(/\/$/, '') : null;
+}
+
+/**
+ * Base URL of the sync API.
+ *
+ * On a deployed origin the API lives on the same host, so a relative `/api`
+ * is correct. Inside the native shell there is no server at all behind the
+ * WebView, so a relative call would hit `https://localhost/api` and fail —
+ * there we MUST have an absolute URL (VITE_SYNC_BASE_URL baked in at build).
+ */
+export function syncBaseUrl(): string {
+  return configuredSyncBase() ?? '/api';
 }
 
 /**
  * Sync is on when there is somewhere real to sync to.
  *
- * On a deployed origin the API lives at the same host, so it just works.
- * On localhost there is no /api, so we stay off unless the developer points
- * VITE_SYNC_BASE_URL at a deployment — otherwise local dev would spin on
- * failing requests.
+ * - A configured VITE_SYNC_BASE_URL is always authoritative (relative is fine
+ *   on the web, but on native it must be absolute to be reachable).
+ * - Otherwise, on a real deployed origin the API is same-origin, so it works.
+ * - The native shell with no configured URL has no reachable API, so we stay
+ *   off instead of spinning on requests to `https://localhost/api`.
  */
 export function isCloudSyncConfigured(): boolean {
   if (typeof fetch !== 'function') return false;
-  const env = import.meta.env as Record<string, string | undefined>;
-  if (env['VITE_SYNC_BASE_URL']) return true;
+
+  const configured = configuredSyncBase();
+  if (configured) {
+    // A relative base only works when a same-origin server answers it. In the
+    // native shell nothing does, so treat it as unconfigured.
+    if (isNativeShell() && !/^https?:\/\//i.test(configured)) return false;
+    return true;
+  }
+
   if (typeof window === 'undefined') return false;
+  if (isNativeShell()) return false;
   const host = window.location?.hostname ?? '';
   return host !== 'localhost' && host !== '127.0.0.1' && host !== '';
 }

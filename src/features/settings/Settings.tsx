@@ -147,7 +147,14 @@ export function Settings() {
             </AlertBanner>
           ) : (
             issues.map((issue) => (
-              <AlertBanner key={issue.key} tone="danger" title={issue.messageAr}>
+              // Only a missing notification permission is a hard failure; the
+              // exact-alarm note is an advisory the user may not be able to
+              // resolve from inside the app, so it must not read as "broken".
+              <AlertBanner
+                key={issue.key}
+                tone={issue.key === 'notifGranted' ? 'danger' : 'warning'}
+                title={issue.messageAr}
+              >
                 <p>{issue.actionAr}</p>
               </AlertBanner>
             ))

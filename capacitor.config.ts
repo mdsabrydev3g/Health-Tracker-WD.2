@@ -19,9 +19,16 @@ const config: CapacitorConfig = {
   },
   plugins: {
     LocalNotifications: {
-      smallIcon: 'ic_stat_icon_config_sample',
+      // `smallIcon` must exist in res/drawable, otherwise the plugin falls
+      // back to android.R.drawable.ic_dialog_info. `ic_stat_icon_config_sample`
+      // is not in this project, so notifications were wearing a generic icon.
+      smallIcon: 'ic_launcher_foreground',
       iconColor: '#0f766e',
-      sound: 'beep.wav',
+      // NOTE: no custom `sound`. The plugin resolves `sound` against res/raw
+      // and this project has no res/raw, so a name here silently produced a
+      // null sound URI and the channel ended up SILENT. Omitting it lets the
+      // channel use the system default notification sound, which is what a
+      // medication reminder should do.
     },
     SplashScreen: {
       launchShowDuration: 1500,
