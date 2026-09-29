@@ -125,7 +125,7 @@ export function Inventory() {
                 : 1;
             const tone = proj.isLow ? 'danger' : proj.expiresBeforeDepletion ? 'warning' : 'success';
             return (
-              <Card key={med.id}>
+              <Card key={med.id} data-testid={`inv-card-${med.id}`}>
                 <CardContent className="flex items-center gap-4 pt-5">
                   <ProgressRing
                     value={fraction}
@@ -139,7 +139,10 @@ export function Inventory() {
                     <Link to={`/medications/${med.id}`} className="truncate font-bold hover:underline">
                       {med.nameAr}
                     </Link>
-                    <p className="numeric mt-0.5 text-xs text-muted-foreground">
+                    <p
+                      className="numeric mt-0.5 text-xs text-muted-foreground"
+                      data-testid={`inv-balance-${med.id}`}
+                    >
                       الرصيد: {formatNumber(proj.balance, 'western')} · يستهلك{' '}
                       {formatNumber(proj.dailyConsumption, 'western')}/يوم
                     </p>

@@ -80,7 +80,10 @@ export function DoseRow({
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <PillIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
-            <p className={cn('truncate font-bold', compact ? 'text-sm' : 'text-base')}>
+            <p
+              className={cn('truncate font-bold', compact ? 'text-sm' : 'text-base')}
+              data-testid={`dose-med-${dose.id}`}
+            >
               {med?.nameAr ?? 'دواء محذوف'}
             </p>
           </div>
@@ -110,6 +113,7 @@ export function DoseRow({
                 onClick={() => void act(() => markTaken(dose.id, 'caregiver'))}
                 aria-label="تم أخذ الجرعة"
                 title="تم أخذ الجرعة"
+                data-testid={`dose-take-${dose.id}`}
               >
                 <Check className="h-5 w-5" />
               </Button>
@@ -120,6 +124,7 @@ export function DoseRow({
                 onClick={() => setSnoozeOpen(true)}
                 aria-label="تأجيل"
                 title="تأجيل"
+                data-testid={`dose-snooze-${dose.id}`}
               >
                 <Clock className="h-4 w-4" />
               </Button>
@@ -130,6 +135,7 @@ export function DoseRow({
                 onClick={() => void act(() => skipDose(dose.id, 'caregiver'))}
                 aria-label="تخطي"
                 title="تخطي"
+                data-testid={`dose-skip-${dose.id}`}
               >
                 <Ban className="h-4 w-4" />
               </Button>

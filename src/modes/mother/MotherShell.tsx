@@ -158,6 +158,7 @@ export function MotherShell() {
               className="h-28 w-full text-2xl font-extrabold"
               disabled={busy}
               onClick={() => void handleTaken()}
+              data-testid="mother-take-dose"
             >
               <Check className="h-9 w-9" />
               أخذت الدواء

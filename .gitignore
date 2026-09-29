@@ -53,5 +53,10 @@ Thumbs.db
 
 # Memory directory (workbuddy local data)
 .workbuddy-ai/memory/2026-*.md
-.workbuddy-ai/memory/2025-*.mdvitest.config.ts.timestamp-*.mjs
+.workbuddy-ai/memory/2025-*.md
 .workbuddy-ai/memory/
+
+# Vitest temp config files
+vitest.config.ts.timestamp-*.mjs
+
+.vercel
