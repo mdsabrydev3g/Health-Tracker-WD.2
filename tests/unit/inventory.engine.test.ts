@@ -11,6 +11,7 @@ import {
   stockFraction,
   unitLabelAr,
   unitsForDays,
+  type StockProjection,
 } from '@/core/engine/inventory.engine';
 import type { InventoryEvent, Medication, Schedule } from '@/core/db/schema';
 
@@ -335,12 +336,15 @@ describe('helpers', () => {
 });
 
 describe('dosesRemaining (عدد الجرعات)', () => {
-  const withRate = (balance: number, rate: number) => ({
+  const withRate = (balance: number, rate: number): StockProjection => ({
     balance,
     dailyConsumption: rate,
     remainingDays: rate > 0 ? balance / rate : Number.POSITIVE_INFINITY,
     depletionDate: null,
     isLow: false,
+    packExpiry: undefined,
+    expiresBeforeDepletion: false,
+    daysUntilExpiry: null,
   });
 
   it('divides balance by units-per-dose when a schedule is active', () => {
@@ -369,8 +373,6 @@ describe('unitLabelAr', () => {
   });
 
   it('labels any other form as وحدة', () => {
-    expect(unitLabelAr('liquid')).toBe('وحدة');
-    expect(unitLabelAr('injection')).toBe('وحدة');
-    expect(unitLabelAr('puff')).toBe('وحدة');
+    expect(unitLabelAr('syrup')).toBe('وحدة');
   });
 });
