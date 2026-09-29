@@ -10,8 +10,9 @@ import {
 import { Button } from '@/ui/button';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog';
 
-/** Remember that we already asked, so the app never nags on every launch. */
-const ASKED_KEY = 'ht:perms:asked';
+/** A real grant is remembered for good; "later" only silences this session. */
+const GRANTED_KEY = 'ht:perms:granted';
+const LATER_KEY = 'ht:perms:later';
 
 function StatusRow({
   icon,
@@ -53,8 +54,10 @@ export function PermissionPrompt() {
     let cancelled = false;
     (async () => {
       if (typeof window === 'undefined') return;
-      // Already asked once — the user can still grant from Settings.
-      if (window.localStorage.getItem(ASKED_KEY) === '1') return;
+      // Granted for good → never ask again. "Later" only mutes this session,
+      // so the prompt reliably comes back on the next launch until it is granted.
+      if (window.localStorage.getItem(GRANTED_KEY) === '1') return;
+      if (window.sessionStorage.getItem(LATER_KEY) === '1') return;
 
       const health = await refreshAlarmHealth();
       if (cancelled || !health) return;
@@ -84,7 +87,7 @@ export function PermissionPrompt() {
 
       // Everything we need is granted — stop asking for good.
       if (health && !hasCriticalAlarmIssue(health)) {
-        window.localStorage.setItem(ASKED_KEY, '1');
+        window.localStorage.setItem(GRANTED_KEY, '1');
         setOpen(false);
       }
     } finally {
@@ -93,7 +96,7 @@ export function PermissionPrompt() {
   };
 
   const later = () => {
-    window.localStorage.setItem(ASKED_KEY, '1');
+    window.sessionStorage.setItem(LATER_KEY, '1');
     setOpen(false);
   };
 
