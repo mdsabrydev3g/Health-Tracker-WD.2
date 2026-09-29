@@ -23,9 +23,21 @@ import {
   materialisationWindow,
   materialiseDoses,
 } from '@/core/engine/dose.engine';
-import { foldBalance, buildInventoryEvent, alreadyConsumed } from '@/core/engine/inventory.engine';
+import { foldBalance, buildInventoryEvent, alreadyConsumed, projectStock } from '@/core/engine/inventory.engine';
+import type { StockProjection } from '@/core/engine/inventory.engine';
 import { todayIn } from '@/lib/utils';
+import { rescheduleAlarms, cancelAllAlarms } from '@/core/notify/alarmService';
 import { createSeed } from '@/features/onboarding/seed';
+import { isCloudSyncConfigured, runSync } from '@/core/sync/cloudSync';
+import type { SyncConflict, SyncStatus } from '@/core/sync/cloudSync';
+import { registerConnectivityHandlers } from '@/core/sync/outbox';
+
+export interface SyncState {
+  status: SyncStatus;
+  lastSyncedAt?: string;
+  lastError?: string;
+  conflicts: SyncConflict[];
+}
 
 export interface AppState {
   ready: boolean;
@@ -55,6 +67,9 @@ export interface AppState {
   /* medications */
   saveMedication: (med: Partial<Medication> & { personId: string; nameAr: string }) => Promise<Medication>;
   archiveMedication: (medId: string, reason: string) => Promise<void>;
+  deleteMedication: (medId: string) => Promise<void>;
+  deleteSchedule: (scheduleId: string) => Promise<void>;
+  deleteLab: (labId: string) => Promise<void>;
 
   /* schedules */
   saveSchedule: (schedule: Partial<Schedule> & { medId: string; personId: string }) => Promise<Schedule>;
@@ -74,6 +89,15 @@ export interface AppState {
     atUtc?: string;
   }) => Promise<void>;
 
+  /* sync — keeps phone / desktop / web in step */
+  syncState: SyncState;
+  syncNow: () => Promise<void>;
+  /** Start periodic + reconnect syncing. Returns a stop function. */
+  startAutoSync: () => () => void;
+
+  /** Reschedule device alarms from current state (consumes planAlarms). */
+  rescheduleAlarms: () => Promise<void>;
+
   /* derived helpers */
   activePerson: () => Person | undefined;
   dosesForDay: (day: string) => DoseEvent[];
@@ -83,6 +107,25 @@ export interface AppState {
 }
 
 const seedRepo = new DexieRepository();
+
+/*
+ * Sync guards.
+ *
+ * `syncInFlight` keeps one cycle at a time — without it, the refresh() that
+ * sync itself triggers after applying remote rows would schedule another
+ * sync, which would refresh again, forever.
+ */
+let syncInFlight = false;
+let syncTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Debounced sync kick, so a burst of edits costs one round trip. */
+function scheduleSync(get: () => AppState, delay = 4000): void {
+  if (syncTimer) clearTimeout(syncTimer);
+  syncTimer = setTimeout(() => {
+    syncTimer = null;
+    void get().syncNow();
+  }, delay);
+}
 
 export const useApp = create<AppState>((set, get) => ({
   ready: false,
@@ -109,6 +152,7 @@ export const useApp = create<AppState>((set, get) => ({
   inventoryByMed: {},
   statuses: new Map(),
   busy: false,
+  syncState: { status: 'idle', conflicts: [] },
 
   /* ---------------- lifecycle ---------------- */
 
@@ -222,12 +266,23 @@ export const useApp = create<AppState>((set, get) => ({
     }
 
     set({ medications, schedules, doseEvents, inventoryByMed, statuses });
+
+    // Re-arm the device alarms for the freshly-loaded state. This is the
+    // critical path that actually registers per-dose + low-stock alarms.
+    void get().rescheduleAlarms();
+
+    // Any local change should reach the other devices. Debounced so a burst
+    // of writes is one round trip, and skipped while a sync is applying
+    // remote rows (that would loop).
+    if (!syncInFlight) scheduleSync(get);
   },
 
   setActivePerson: async (personId) => {
     const settings = { ...get().settings, activePersonId: personId };
     await get().repo.putSettings(settings);
     set({ activePersonId: personId, settings });
+    // Drop alarms belonging to the previous person before loading the new one.
+    await cancelAllAlarms();
     await get().refresh();
   },
 
@@ -239,6 +294,10 @@ export const useApp = create<AppState>((set, get) => ({
 
   switchMode: async (mode) => {
     await get().setSettings({ activeMode: mode });
+    // The notification policy hinges on mode — drop the old policy's alarms
+    // and reschedule under the new one (Mother gets dose alarms, Owner doesn't).
+    await cancelAllAlarms();
+    await get().rescheduleAlarms();
   },
 
   /* ---------------- people ---------------- */
@@ -364,6 +423,53 @@ export const useApp = create<AppState>((set, get) => ({
       deleted: false,
     });
 
+    await get().refresh();
+  },
+
+  deleteMedication: async (medId) => {
+    const { repo } = get();
+    const med = await repo.getMedication(medId);
+    if (!med) return;
+    const deviceId = get().device?.id ?? 'system';
+    const now = new Date().toISOString();
+
+    await repo.deleteMedication(medId);
+
+    // Cascade: remove its schedules and soft-cancel its dose events so no
+    // orphan doses keep showing up (§5 — history is never physically removed).
+    for (const s of get().schedules.filter((s) => s.medId === medId && !s.deleted)) {
+      await repo.deleteSchedule(s.id);
+    }
+    for (const d of get().doseEvents.filter((d) => d.medId === medId && !d.deleted)) {
+      await repo.putDoseEvent({ ...d, deleted: true, rev: d.rev + 1, updatedAt: now });
+    }
+
+    await repo.appendAuditLog({
+      id: newId('aud'),
+      actorDeviceId: deviceId,
+      atUtc: now,
+      entity: 'medications',
+      entityId: medId,
+      action: 'delete',
+      after: { name: med.nameAr },
+      updatedAt: now,
+      updatedBy: deviceId,
+      rev: 1,
+      deleted: false,
+    });
+
+    await get().refresh();
+  },
+
+  deleteSchedule: async (scheduleId) => {
+    const { repo } = get();
+    await repo.deleteSchedule(scheduleId);
+    await get().refresh();
+  },
+
+  deleteLab: async (labId) => {
+    const { repo } = get();
+    await repo.deleteLabResult(labId);
     await get().refresh();
   },
 
@@ -614,6 +720,100 @@ export const useApp = create<AppState>((set, get) => ({
     });
 
     await get().refresh();
+  },
+
+  /* ---------------- sync ---------------- */
+
+  syncNow: async () => {
+    if (syncInFlight) return;
+
+    if (!isCloudSyncConfigured()) {
+      set((s) => ({ syncState: { ...s.syncState, status: 'idle', lastError: undefined } }));
+      return;
+    }
+
+    const { repo, activePersonId } = get();
+    if (!activePersonId) return;
+
+    syncInFlight = true;
+    set((s) => ({ syncState: { ...s.syncState, status: 'syncing', lastError: undefined } }));
+    try {
+      const result = await runSync({ repo, personId: activePersonId });
+      set((s) => ({
+        syncState: {
+          status: result.status,
+          lastSyncedAt: result.lastSyncedAt ?? s.syncState.lastSyncedAt,
+          lastError: result.lastError,
+          conflicts: result.conflicts,
+        },
+      }));
+      // Remote rows changed local data, so reload it. syncInFlight is still
+      // true here, which is exactly why this refresh won't schedule another
+      // sync — otherwise applying remote data would loop forever.
+      if (result.pulled > 0) await get().refresh();
+    } catch (e) {
+      set((s) => ({
+        syncState: {
+          ...s.syncState,
+          status: 'error',
+          lastError: e instanceof Error ? e.message : String(e),
+        },
+      }));
+    } finally {
+      syncInFlight = false;
+    }
+  },
+
+  startAutoSync: () => {
+    // Periodic, so a device left open still picks up the other's changes.
+    const interval = setInterval(() => void get().syncNow(), 60_000);
+
+    // Straight away when connectivity returns (offline-first, §12).
+    const stopConnectivity = registerConnectivityHandlers((online) => {
+      if (online) void get().syncNow();
+    });
+
+    // And once early, so a second device's edits land soon after opening.
+    const bootTimer = setTimeout(() => void get().syncNow(), 3000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(bootTimer);
+      stopConnectivity();
+    };
+  },
+
+  /* ---------------- alarms ---------------- */
+
+  rescheduleAlarms: async () => {
+    const { medications, schedules, doseEvents, inventoryByMed, settings, persons, activePersonId } =
+      get();
+    const person = persons.find((p) => p.id === activePersonId);
+    const today = todayIn(person?.timezone ?? 'Africa/Cairo');
+
+    const projections = new Map<string, StockProjection>();
+    for (const med of medications) {
+      const events = inventoryByMed[med.id] ?? [];
+      const medSchedules = schedules.filter((s) => s.medId === med.id);
+      projections.set(
+        med.id,
+        projectStock({
+          medication: med,
+          schedules: medSchedules,
+          events,
+          today,
+          lowStockThresholdDays: settings.lowStockThresholdDays,
+        }),
+      );
+    }
+
+    await rescheduleAlarms({
+      doses: doseEvents,
+      medications,
+      projections,
+      mode: settings.activeMode,
+      getMed: (id) => get().medById(id),
+    });
   },
 
   /* ---------------- derived ---------------- */

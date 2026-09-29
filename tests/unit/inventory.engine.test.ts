@@ -3,11 +3,13 @@ import {
   alreadyConsumed,
   buildInventoryEvent,
   dailyConsumption,
+  dosesRemaining,
   foldBalance,
   isExpired,
   projectStock,
   roundQty,
   stockFraction,
+  unitLabelAr,
   unitsForDays,
 } from '@/core/engine/inventory.engine';
 import type { InventoryEvent, Medication, Schedule } from '@/core/db/schema';
@@ -329,5 +331,46 @@ describe('helpers', () => {
     expect(stockFraction(-5, 30)).toBe(0);
     expect(stockFraction(50, 30)).toBe(1);
     expect(stockFraction(5, 0)).toBe(0);
+  });
+});
+
+describe('dosesRemaining (عدد الجرعات)', () => {
+  const withRate = (balance: number, rate: number) => ({
+    balance,
+    dailyConsumption: rate,
+    remainingDays: rate > 0 ? balance / rate : Number.POSITIVE_INFINITY,
+    depletionDate: null,
+    isLow: false,
+  });
+
+  it('divides balance by units-per-dose when a schedule is active', () => {
+    expect(dosesRemaining(withRate(10, 1), 1)).toBe(10);
+    expect(dosesRemaining(withRate(10, 1), 2)).toBe(5);
+    expect(dosesRemaining(withRate(9, 1), 0.5)).toBe(18);
+  });
+
+  it('treats a zero/negative per-dose as one dose each', () => {
+    expect(dosesRemaining(withRate(10, 1), 0)).toBe(10);
+  });
+
+  it('counts the whole balance as doses when nothing is being consumed', () => {
+    expect(dosesRemaining(withRate(50, 0), 1)).toBe(50);
+  });
+
+  it('never returns fewer than zero doses', () => {
+    expect(dosesRemaining(withRate(0, 1), 1)).toBe(0);
+  });
+});
+
+describe('unitLabelAr', () => {
+  it('labels tablets and capsules as قرص', () => {
+    expect(unitLabelAr('tablet')).toBe('قرص');
+    expect(unitLabelAr('capsule')).toBe('قرص');
+  });
+
+  it('labels any other form as وحدة', () => {
+    expect(unitLabelAr('liquid')).toBe('وحدة');
+    expect(unitLabelAr('injection')).toBe('وحدة');
+    expect(unitLabelAr('puff')).toBe('وحدة');
   });
 });

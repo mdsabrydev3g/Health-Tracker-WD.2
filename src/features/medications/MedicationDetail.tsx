@@ -6,6 +6,7 @@ import {
   Edit3,
   Package,
   Plus,
+  Trash2,
   TriangleAlert,
   Undo2,
 } from 'lucide-react';
@@ -16,7 +17,7 @@ import { Button } from '@/ui/button';
 import { Input, Label, Textarea } from '@/ui/input';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/ui/tabs';
-import { projectStock } from '@/core/engine/inventory.engine';
+import { projectStock, dosesRemaining, unitLabelAr } from '@/core/engine/inventory.engine';
 import { buildCostReport, formatMoney } from '@/core/engine/cost.engine';
 import { formatLocalTime, todayIn } from '@/core/time';
 import { FOOD_RULE_LABELS, FORM_LABELS, SCHEDULE_KIND_LABELS, STATUS_AR } from '@/i18n/ar';
@@ -35,6 +36,7 @@ export function MedicationDetail() {
   const settings = useApp((s) => s.settings);
   const adjustInventory = useApp((s) => s.adjustInventory);
   const archiveMedication = useApp((s) => s.archiveMedication);
+  const deleteMedication = useApp((s) => s.deleteMedication);
   const logPrnDose = useApp((s) => s.logPrnDose);
 
   const [editOpen, setEditOpen] = useState(false);
@@ -42,6 +44,7 @@ export function MedicationDetail() {
   const [refillOpen, setRefillOpen] = useState(false);
   const [correctOpen, setCorrectOpen] = useState(false);
   const [archiveOpen, setArchiveOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const [refillQty, setRefillQty] = useState('30');
   const [refillPrice, setRefillPrice] = useState('');
@@ -109,6 +112,12 @@ export function MedicationDetail() {
       : 1;
   const tone = proj.isLow ? 'danger' : proj.expiresBeforeDepletion ? 'warning' : 'success';
 
+  const qpd = medSchedules.find((s) => s.activeTo === null)?.quantityPerDose ?? 1;
+  const doses = dosesRemaining(proj, qpd);
+  const unit = unitLabelAr(med.form);
+  const daysLeftText =
+    proj.remainingDays === Number.POSITIVE_INFINITY ? '—' : String(Math.floor(proj.remainingDays));
+
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
@@ -120,6 +129,7 @@ export function MedicationDetail() {
           <p className="numeric text-xs text-muted-foreground">
             {med.strength.value} {med.strength.unit} · {FORM_LABELS[med.form]} ·{' '}
             {STATUS_AR[med.status]}
+            {med.isImportant ? ' · هام' : ''}
           </p>
         </div>
         <Button variant="outline" size="sm" onClick={() => setEditOpen(true)}>
@@ -159,15 +169,20 @@ export function MedicationDetail() {
             value={fraction}
             size={96}
             tone={tone}
-            label={proj.remainingDays === Infinity ? '—' : String(Math.floor(proj.remainingDays))}
+            label={daysLeftText}
             sublabel="يوم"
           />
           <div className="grid flex-1 grid-cols-2 gap-3 text-sm">
-            <Stat label="الرصيد" value={String(proj.balance)} />
+            <Stat label={`الرصيد (${unit})`} value={String(proj.balance)} />
+            <Stat label="الجرعات المتبقية" value={String(doses)} />
             <Stat label="المستهلك يومياً" value={String(proj.dailyConsumption)} />
             <Stat label="تاريخ النفاد" value={proj.depletionDate ?? '—'} />
-            <Stat label="الصلاحية" value={med.packExpiry ?? '—'} />
           </div>
+        </CardContent>
+        <CardContent className="pb-5 pt-0">
+          <p className="numeric text-sm font-semibold text-muted-foreground">
+            {proj.balance} {unit} · {doses} جرعة · {daysLeftText} يوم متبقٍ
+          </p>
         </CardContent>
       </Card>
 
@@ -193,6 +208,10 @@ export function MedicationDetail() {
         <Button variant="outline" onClick={() => setArchiveOpen(true)}>
           <Ban className="h-4 w-4" />
           إيقاف الدواء
+        </Button>
+        <Button variant="outline" className="text-destructive" onClick={() => setDeleteOpen(true)}>
+          <Trash2 className="h-4 w-4" />
+          حذف الدواء
         </Button>
       </div>
 
@@ -320,6 +339,8 @@ export function MedicationDetail() {
               {med.foodRule.text && <Row label="ملاحظة الطعام" value={med.foodRule.text} />}
               <Row label="الطبيب" value={med.doctor ?? '—'} />
               <Row label="الحالة" value={med.condition ?? '—'} />
+              <Row label="دواء هام" value={med.isImportant ? 'نعم' : 'لا'} />
+              {med.barcode && <Row label="باركود العلبة" value={med.barcode} />}
               <Row label="تاريخ البداية" value={med.startDate} />
               <Row
                 label="العبوة"
@@ -494,6 +515,33 @@ export function MedicationDetail() {
       </Dialog>
 
       <MedicationWizard personId={person.id} open={editOpen} onOpenChange={setEditOpen} initial={med} />
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>حذف الدواء</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            سيتم حذف «{med.nameAr}» وجدوله وأحداث جرعاته المستقبلية. يبقى سجل الجرعات والعمليات السابقة في
+            الأرشيف ولا يمكن التراجع.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                void deleteMedication(med.id);
+                setDeleteOpen(false);
+                navigate('/medications');
+              }}
+            >
+              حذف نهائي
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <ScheduleEditor
         medId={med.id}
         personId={person.id}

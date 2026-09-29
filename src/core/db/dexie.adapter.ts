@@ -282,6 +282,18 @@ export class DexieRepository implements Repository {
     await this.db.labResults.put(result);
   };
 
+  getLabResult = async (id: string): Promise<LabResult | undefined> => {
+    const r = await this.db.labResults.get(id);
+    return r && !r.deleted ? r : undefined;
+  };
+
+  deleteLabResult = async (id: string): Promise<void> => {
+    const r = await this.db.labResults.get(id);
+    if (r) {
+      await this.db.labResults.put({ ...r, deleted: true, rev: r.rev + 1, updatedAt: new Date().toISOString() });
+    }
+  };
+
   listDocuments = async (personId: string): Promise<DocumentRef[]> =>
     (await this.db.documents.where('personId').equals(personId).toArray()).filter((d) => !d.deleted);
 

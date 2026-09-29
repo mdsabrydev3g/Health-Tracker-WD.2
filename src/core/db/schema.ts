@@ -148,6 +148,10 @@ export interface Medication extends SyncEnvelope {
   condition?: string;
   status: MedStatus;
   discontinuedReason?: string;
+  /** Critical medicine — drives owner-mode low-stock alarms (§9). */
+  isImportant?: boolean;
+  /** Scanned box barcode / QR, captured for quick re-entry (no name lookup yet). */
+  barcode?: string;
   /** Fast-read cache. ALWAYS recomputable by folding inventoryEvents (§7). */
   balanceCache?: number;
 }

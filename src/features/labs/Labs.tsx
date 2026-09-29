@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react';
-import { FileText, Loader2, Sparkles, TriangleAlert, Upload } from 'lucide-react';
+import { FileText, Loader2, Sparkles, Trash2, TriangleAlert, Upload } from 'lucide-react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApp } from '@/app/store';
 import { PageHeader } from '@/modes/caregiver/CaregiverShell';
@@ -8,11 +8,12 @@ import { Card, CardContent } from '@/ui/card';
 import { Button } from '@/ui/button';
 import { Label, Textarea } from '@/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ui/dialog';
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/ui/dialog';
 import type { LabResult } from '@/core/db/schema';
 import { newId } from '@/core/db/schema';
 import { AI_DISCLAIMER } from '@/core/notify/scheduler';
 import { isAiConfigured, aiFunctionUrl } from '@/core/sync/outbox';
+import { extractText, summariseLabText, dataUrlToFile } from '@/core/ai/freeAi';
 import { readFileAsDataUrl } from '@/lib/utils';
 
 const LAB_TYPES = [
@@ -32,6 +33,7 @@ export function Labs() {
   const person = useApp((s) => s.activePerson());
   const repo = useApp((s) => s.repo);
   const device = useApp((s) => s.device);
+  const deleteLab = useApp((s) => s.deleteLab);
   const queryClient = useQueryClient();
 
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -42,6 +44,7 @@ export function Labs() {
   const [summarising, setSummarising] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [viewing, setViewing] = useState<LabResult | null>(null);
+  const [deleteLabId, setDeleteLabId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const { data: labs = [] } = useQuery({
@@ -115,26 +118,48 @@ export function Labs() {
   };
 
   /**
-   * AI summary via the Cloud Function ONLY (§11).
-   * The client never holds an API key. If the function isn't configured,
-   * we leave the record as `pending` rather than faking a result.
+   * AI summary — fully FREE and keyless by default (§11).
+   *
+   * The client OCRs the image locally (Tesseract) or extracts PDF text, then:
+   *   - if a Cloud Function is configured, sends the TEXT to it (better model);
+   *   - otherwise summarises directly via Pollinations (no key, no cost).
+   * The original file is always kept; a failure only flips status to `failed`.
    */
+  const getStoredDataUrl = (labId: string): string | null => {
+    try {
+      const raw = localStorage.getItem(`ht:doc:${labId}`);
+      return raw ? (JSON.parse(raw).data as string) : null;
+    } catch {
+      return null;
+    }
+  };
+
   const summarise = async (labId: string, dataUrl: string, type: string, date: string) => {
-    const url = aiFunctionUrl('summariseLab');
-    if (!url) return;
     setSummarising(labId);
     try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ imageBase64: dataUrl, labType: type, labDate: date, lang: 'ar' }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const json = (await res.json()) as {
-        summary?: Record<string, unknown>;
-        model?: string;
-        schemaVersion?: number;
-      };
+      const du = dataUrl || getStoredDataUrl(labId);
+      if (!du) throw new Error('no file');
+
+      const file = dataUrlToFile(du, `${labId}.bin`);
+      const text = await extractText(file);
+
+      const url = aiFunctionUrl('summariseLab');
+      let summary: string;
+      let model: string;
+      if (url) {
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text, labType: type, labDate: date, lang: 'ar' }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const json = (await res.json()) as { summary?: string; text?: string; model?: string };
+        summary = json.summary ?? json.text ?? '';
+        model = json.model ?? 'cloud';
+      } else {
+        summary = await summariseLabText(text);
+        model = 'pollinations-free';
+      }
 
       const existing = await repo.listLabResults(person?.id ?? '');
       const lab = existing.find((l) => l.id === labId);
@@ -144,10 +169,10 @@ export function Labs() {
         ...lab,
         status: 'summarised',
         aiSummary: {
-          schemaVersion: json.schemaVersion ?? 1,
-          model: json.model ?? 'unknown',
+          schemaVersion: 1,
+          model,
           atUtc: new Date().toISOString(),
-          sections: json.summary ?? {},
+          sections: { mainResults: summary },
         },
         updatedAt: new Date().toISOString(),
         rev: lab.rev + 1,
@@ -180,12 +205,16 @@ export function Labs() {
         }
       />
 
-      {!aiReady && (
-        <AlertBanner tone="info" title="الملخص الذكي غير مُفعّل" icon={<Sparkles className="h-5 w-5" />}>
+      {!aiReady ? (
+        <AlertBanner tone="success" title="الملخص الذكي المجاني مُفعّل" icon={<Sparkles className="h-5 w-5" />}>
           <p>
-            يمكنك رفع الملفات والاحتفاظ بها الآن. لتفعيل الملخصات بالعربية، أضف رابط دالة السحابة في إعدادات
-            النشر (‎VITE_FUNCTIONS_BASE_URL‎). لا تُوضع مفاتيح الذكاء الاصطناعي في التطبيق أبداً.
+            يقرأ المساعد صور التحاليل والإشاعات مجاناً وبلا أي مفتاح، ويعرض النتيجة أسفل الملف مباشرة. يلزم اتصال
+            بالإنترنت أثناء القراءة. (لرفع الجودة يمكن لاحقاً ربط دالة سحابية.)
           </p>
+        </AlertBanner>
+      ) : (
+        <AlertBanner tone="info" title="الملخص الذكي مُفعّل (سحابة)" icon={<Sparkles className="h-5 w-5" />}>
+          <p>يُرسَل النص المستخرج محلياً إلى دالة السحابة المُهيّأة لملخص أدق. الملف الأصلي يُحفظ دائماً.</p>
         </AlertBanner>
       )}
 
@@ -225,6 +254,15 @@ export function Labs() {
                 )}
                 <Button size="sm" variant="outline" onClick={() => setViewing(lab)}>
                   عرض
+                </Button>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  aria-label="حذف"
+                  className="text-muted-foreground hover:text-destructive"
+                  onClick={() => setDeleteLabId(lab.id)}
+                >
+                  <Trash2 className="h-4 w-4" />
                 </Button>
               </CardContent>
             </Card>
@@ -319,12 +357,50 @@ export function Labs() {
               <AlertBanner tone="info" title="تنبيه">
                 <p>{AI_DISCLAIMER}</p>
               </AlertBanner>
+              <div className="flex justify-end pt-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive"
+                  onClick={() => setDeleteLabId(viewing?.id ?? null)}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  حذف الملف
+                </Button>
+              </div>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">
               لا يوجد ملخص لهذا الملف. الملف الأصلي محفوظ كما هو.
             </p>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteLabId} onOpenChange={(o) => !o && setDeleteLabId(null)}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>حذف الملف الطبي</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            سيُحذف هذا الملف وملخصه. لا يمكن التراجع.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteLabId(null)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (deleteLabId) void deleteLab(deleteLabId);
+                setDeleteLabId(null);
+                setViewing(null);
+                invalidate();
+              }}
+            >
+              حذف
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

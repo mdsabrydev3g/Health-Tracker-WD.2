@@ -39,6 +39,14 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Keep this device in step with the others: periodic sync, plus an
+  // immediate one whenever connectivity comes back.
+  const startAutoSync = useApp((s) => s.startAutoSync);
+  useEffect(() => {
+    if (!ready || !onboardingDone) return;
+    return startAutoSync();
+  }, [ready, onboardingDone, startAutoSync]);
+
   if (!ready) return <Splash />;
 
   if (error) {

@@ -28,7 +28,9 @@ export function ScheduleEditor({
 }) {
   const person = useApp((s) => s.activePerson());
   const saveSchedule = useApp((s) => s.saveSchedule);
+  const deleteSchedule = useApp((s) => s.deleteSchedule);
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
 
   const timezone = person?.timezone ?? 'Africa/Cairo';
   const today = todayIn(timezone);
@@ -256,6 +258,16 @@ export function ScheduleEditor({
         </div>
 
         <DialogFooter>
+          {existing && (
+            <Button
+              variant="ghost"
+              className="mr-auto text-destructive"
+              onClick={() => setDeleteOpen(true)}
+            >
+              <Trash2 className="h-4 w-4" />
+              حذف الجدول
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => onOpenChange(false)}>
             إلغاء
           </Button>
@@ -264,6 +276,32 @@ export function ScheduleEditor({
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>حذف الجدول</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            سيُغلق الجدول الحالي ولن يُولّد جرعات جديدة منه. الجرعات السابقة تبقى في السجل.
+          </p>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setDeleteOpen(false)}>
+              إلغاء
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (existing) void deleteSchedule(existing.id);
+                setDeleteOpen(false);
+                onOpenChange(false);
+              }}
+            >
+              حذف الجدول
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

@@ -7,7 +7,7 @@
  * inventoryEvents; `medications.balanceCache` is only a read-through cache.
  */
 
-import type { ISODate, ISODateTime, InventoryEvent, Medication, Schedule } from '../db/schema';
+import type { DoseForm, ISODate, ISODateTime, InventoryEvent, Medication, Schedule } from '../db/schema';
 import { addLocalDays, diffLocalDays, parseLocalDay, utcToLocalDayString } from '../time';
 import { quantityForDay, scheduleOccursOn } from './dose.engine';
 
@@ -195,6 +195,23 @@ export function alreadyConsumed(events: InventoryEvent[], doseId: string): boole
 /** Units required to reach a target number of days of cover. */
 export function unitsForDays(days: number, ratePerDay: number): number {
   return roundQty(days * ratePerDay);
+}
+
+/**
+ * How many DOSES the current stock can still cover. When there is no active
+ * schedule the whole balance counts as one dose each; otherwise it's
+ * balance ÷ units-per-dose. This is the "عدد الجرعات" the caregiver asked for.
+ */
+export function dosesRemaining(proj: StockProjection, quantityPerDose: number): number {
+  if (proj.dailyConsumption <= 0) return Math.max(0, proj.balance);
+  const perDose = quantityPerDose > 0 ? quantityPerDose : 1;
+  return Math.max(0, roundQty(proj.balance / perDose));
+}
+
+/** Arabic unit word for a medicine form (قرص / وحدة). */
+export function unitLabelAr(form: DoseForm): string {
+  if (form === 'tablet' || form === 'capsule') return 'قرص';
+  return 'وحدة';
 }
 
 /** Fraction of stock remaining, for progress rings (0..1). */

@@ -81,7 +81,10 @@ export interface Repository {
   /* ---------------- Clinical & logs ---------------- */
 
   listLabResults(personId: string): Promise<LabResult[]>;
+  getLabResult(id: string): Promise<LabResult | undefined>;
   putLabResult(result: LabResult): Promise<void>;
+  /** Soft-delete a lab result so it disappears from lists but keeps history. */
+  deleteLabResult(id: string): Promise<void>;
 
   listDocuments(personId: string): Promise<DocumentRef[]>;
   putDocument(doc: DocumentRef): Promise<void>;

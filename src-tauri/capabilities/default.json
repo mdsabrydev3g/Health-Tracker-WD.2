@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Health Tracker keeps everything in the browser's own storage, so it needs no filesystem, shell or network permissions — only the window itself.",
+  "windows": ["main"],
+  "permissions": ["core:default"]
+}

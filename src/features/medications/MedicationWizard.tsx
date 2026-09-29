@@ -20,6 +20,8 @@ interface Props {
   onOpenChange: (open: boolean) => void;
   /** Existing medication to edit, if any. */
   initial?: Medication;
+  /** Barcode scanned from a box — used when adding a new medicine. */
+  prefillBarcode?: string;
 }
 
 interface WizardState {
@@ -50,10 +52,12 @@ interface WizardState {
   condition: string;
   isPrescription: boolean;
   isControlled: boolean;
+  isImportant: boolean;
+  barcode: string;
   notes: string;
 }
 
-function initialState(med?: Medication): WizardState {
+function initialState(med?: Medication, prefillBarcode?: string): WizardState {
   return {
     nameAr: med?.nameAr ?? '',
     nameEn: med?.nameEn ?? '',
@@ -82,6 +86,8 @@ function initialState(med?: Medication): WizardState {
     condition: med?.condition ?? '',
     isPrescription: med?.rx.isPrescription ?? true,
     isControlled: med?.rx.isControlled ?? false,
+    isImportant: med?.isImportant ?? false,
+    barcode: med?.barcode ?? prefillBarcode ?? '',
     notes: med?.notes ?? '',
   };
 }
@@ -90,12 +96,18 @@ function initialState(med?: Medication): WizardState {
  * Add / edit wizard with a LIVE calculation preview (§10 #2, §15 phase 3).
  * The preview shows exactly what the engines will compute before saving.
  */
-export function MedicationWizard({ personId, open, onOpenChange, initial }: Props) {
+export function MedicationWizard({
+  personId,
+  open,
+  onOpenChange,
+  initial,
+  prefillBarcode,
+}: Props) {
   const person = useApp((s) => s.activePerson());
   const saveMedication = useApp((s) => s.saveMedication);
   const saveSchedule = useApp((s) => s.saveSchedule);
 
-  const [state, setState] = useState<WizardState>(() => initialState(initial));
+  const [state, setState] = useState<WizardState>(() => initialState(initial, prefillBarcode));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
@@ -190,6 +202,8 @@ export function MedicationWizard({ personId, open, onOpenChange, initial }: Prop
         doctor: state.doctor.trim() || undefined,
         condition: state.condition.trim() || undefined,
         notes: state.notes.trim() || undefined,
+        isImportant: state.isImportant,
+        ...(state.barcode.trim() ? { barcode: state.barcode.trim() } : {}),
         rx: { isPrescription: state.isPrescription, isControlled: state.isControlled },
         startDate: today,
         status: 'active',
@@ -264,6 +278,17 @@ export function MedicationWizard({ personId, open, onOpenChange, initial }: Prop
                 value={state.ingredients}
                 onChange={(e) => set('ingredients', e.target.value)}
                 placeholder="افصل بينها بفاصلة"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="barcode">باركود العلبة (اختياري)</Label>
+              <Input
+                id="barcode"
+                value={state.barcode}
+                onChange={(e) => set('barcode', e.target.value)}
+                placeholder="يُملأ تلقائياً عند مسح العلبة"
+                dir="ltr"
               />
             </div>
 
@@ -584,6 +609,14 @@ export function MedicationWizard({ personId, open, onOpenChange, initial }: Prop
             <div className="space-y-2">
               <Label htmlFor="notes">ملاحظات</Label>
               <Textarea id="notes" value={state.notes} onChange={(e) => set('notes', e.target.value)} />
+            </div>
+            <div className="flex items-center justify-between rounded-xl border p-3">
+              <span className="text-sm font-semibold">دواء هام جداً</span>
+              <Switch
+                checked={state.isImportant}
+                onCheckedChange={(v) => set('isImportant', v)}
+                aria-label="دواء هام"
+              />
             </div>
             <div className="flex items-center justify-between rounded-xl border p-3">
               <span className="text-sm font-semibold">دواء بوصفة طبية</span>
