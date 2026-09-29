@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { BatteryCharging, BellRing, Camera, ShieldCheck } from 'lucide-react';
+import { BellRing, Camera, ShieldCheck } from 'lucide-react';
 import { useApp } from '@/app/store';
 import {
   hasCriticalAlarmIssue,
@@ -123,11 +123,6 @@ export function PermissionPrompt() {
                 ok={result.exactAlarmGranted}
               />
               <StatusRow
-                icon={<BatteryCharging className="h-4 w-4" />}
-                label="استثناء البطارية"
-                ok={result.batteryExempt}
-              />
-              <StatusRow
                 icon={<Camera className="h-4 w-4" />}
                 label="الكاميرا"
                 ok={result.cameraGranted}
@@ -135,7 +130,7 @@ export function PermissionPrompt() {
               {hasCriticalAlarmIssue({
                 notifGranted: result.notifGranted,
                 exactAlarmGranted: result.exactAlarmGranted,
-                batteryExempt: result.batteryExempt,
+                batteryExempt: true,
                 lastRescheduleAtUtc: new Date().toISOString(),
               }) && (
                 <p className="text-xs text-muted-foreground">

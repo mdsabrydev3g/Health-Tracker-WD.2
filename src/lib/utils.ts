@@ -38,7 +38,9 @@ export async function hapticTap(): Promise<void> {
       | { isNativePlatform?: () => boolean }
       | undefined;
     if (!cap?.isNativePlatform?.()) return;
-    const mod = await import(/* @vite-ignore */ '@capacitor/haptics');
+    // No `@vite-ignore`: it prevents bundling and the bare specifier then fails
+    // to resolve at runtime inside the WebView.
+    const mod = await import('@capacitor/haptics');
     await mod.Haptics.impact({ style: mod.ImpactStyle.Medium });
   } catch {
     /* haptics are a nicety, never a requirement */

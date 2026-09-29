@@ -28,6 +28,7 @@ const TABS: Tab[] = [
 export function CaregiverShell({ children }: { children: React.ReactNode }) {
   const location = useLocation();
   const person = useApp((s) => s.activePerson());
+  const persons = useApp((s) => s.persons);
 
   return (
     <div
@@ -66,9 +67,14 @@ export function CaregiverShell({ children }: { children: React.ReactNode }) {
         </div>
       </nav>
 
-      {/* Person context chip — hidden when there is only one person. */}
-      {person && (
-        <div className="pointer-events-none fixed right-3 top-3 z-30 rounded-full border bg-card/90 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur">
+      {/* Person context chip — only meaningful when more than one person is
+          tracked, and kept below the status bar so it never overlaps the
+          phone's notification area. */}
+      {person && persons.length > 1 && (
+        <div
+          className="pointer-events-none fixed right-3 z-30 rounded-full border bg-card/90 px-3 py-1 text-xs font-semibold shadow-sm backdrop-blur"
+          style={{ top: 'calc(0.75rem + env(safe-area-inset-top))' }}
+        >
           {person.nameAr}
         </div>
       )}

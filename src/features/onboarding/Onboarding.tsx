@@ -74,9 +74,9 @@ export function Onboarding() {
       if (api) {
         const perms = await api.requestPermissions();
         if (perms.display !== 'granted') void perms;
-        if (api.requestExactAlarmPermission) await api.requestExactAlarmPermission().catch(() => undefined);
-        if (api.requestBatteryOptimizationExemption) {
-          await api.requestBatteryOptimizationExemption().catch(() => undefined);
+        // Opens the Android screen where the user allows exact alarms.
+        if (api.changeExactNotificationSetting) {
+          await api.changeExactNotificationSetting().catch(() => undefined);
         }
       }
 

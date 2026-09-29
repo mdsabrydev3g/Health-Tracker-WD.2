@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   BellRing,
-  BatteryCharging,
   Lock,
   Monitor,
   Palette,
@@ -128,7 +127,7 @@ export function Settings() {
           </div>
 
           {device?.alarmHealth && (
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-2 gap-2 text-center">
               <HealthTile
                 icon={<BellRing className="h-4 w-4" />}
                 label="الإشعارات"
@@ -138,11 +137,6 @@ export function Settings() {
                 icon={<ShieldCheck className="h-4 w-4" />}
                 label="منبّه دقيق"
                 ok={device.alarmHealth.exactAlarmGranted}
-              />
-              <HealthTile
-                icon={<BatteryCharging className="h-4 w-4" />}
-                label="استثناء البطارية"
-                ok={device.alarmHealth.batteryExempt}
               />
             </div>
           )}

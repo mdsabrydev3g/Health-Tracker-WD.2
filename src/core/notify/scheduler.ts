@@ -100,12 +100,10 @@ export const AI_DISCLAIMER =
 export interface NativeAlarmApi {
   checkPermissions(): Promise<{ display: 'granted' | 'denied' | 'prompt' }>;
   requestPermissions(): Promise<{ display: 'granted' | 'denied' | 'prompt' }>;
-  /** Android 14+: SCHEDULE_EXACT_ALARM is denied by default. */
-  checkExactAlarmPermission?(): Promise<boolean>;
-  requestExactAlarmPermission?(): Promise<void>;
-  /** Doze exemption. */
-  isBatteryOptimizationExempt?(): Promise<boolean>;
-  requestBatteryOptimizationExemption?(): Promise<void>;
+  /** Android 12+: SCHEDULE_EXACT_ALARM may be denied by default. */
+  checkExactNotificationSetting?(): Promise<{ exact_alarm: 'granted' | 'denied' | 'prompt' }>;
+  /** Opens the system screen where the user allows exact alarms. */
+  changeExactNotificationSetting?(): Promise<{ exact_alarm: 'granted' | 'denied' | 'prompt' }>;
   schedule(opts: unknown): Promise<void>;
   cancel(opts: { notifications: { id: number }[] }): Promise<void>;
   getDeliveredNotifications?(): Promise<{ notifications: { id: number }[] }>;
@@ -120,7 +118,11 @@ export async function getNativeAlarmApi(): Promise<NativeAlarmApi | null> {
     | undefined;
   if (!cap?.isNativePlatform?.()) return null;
   try {
-    const mod = await import(/* @vite-ignore */ '@capacitor/local-notifications');
+    // NOTE: no `@vite-ignore` here. That comment stops Vite from bundling the
+    // plugin, leaving a bare specifier the WebView cannot resolve at runtime —
+    // so this import silently failed and the native notification permission was
+    // never requested. Letting Vite bundle it makes the bridge actually work.
+    const mod = await import('@capacitor/local-notifications');
     return mod.LocalNotifications as unknown as NativeAlarmApi;
   } catch {
     return null;
@@ -145,12 +147,22 @@ export async function checkAlarmHealth(api: NativeAlarmApi | null): Promise<Alar
   }
 
   const perms = await api.checkPermissions();
-  const exact = api.checkExactAlarmPermission ? await api.checkExactAlarmPermission() : true;
-  const battery = api.isBatteryOptimizationExempt ? await api.isBatteryOptimizationExempt() : false;
+
+  // Exact alarms (Android 12+). If the plugin cannot report it, assume ok
+  // rather than raising a warning we cannot verify.
+  let exact = true;
+  if (api.checkExactNotificationSetting) {
+    try {
+      const setting = await api.checkExactNotificationSetting();
+      exact = setting?.exact_alarm === 'granted';
+    } catch {
+      exact = true;
+    }
+  }
 
   return {
     exactAlarmGranted: exact,
-    batteryExempt: battery,
+    batteryExempt: true,
     notifGranted: perms.display === 'granted',
     lastRescheduleAtUtc: new Date().toISOString(),
   };
@@ -198,7 +210,6 @@ export async function refreshAlarmHealth(ms = 6000): Promise<AlarmHealth | null>
 export interface PermissionRequestResult {
   notifGranted: boolean;
   exactAlarmGranted: boolean;
-  batteryExempt: boolean;
   cameraGranted: boolean;
 }
 
@@ -234,16 +245,9 @@ export async function requestRuntimePermissions(): Promise<PermissionRequestResu
     } catch {
       /* user dismissed the OS dialog */
     }
-    if (native.requestExactAlarmPermission) {
+    if (native.changeExactNotificationSetting) {
       try {
-        await native.requestExactAlarmPermission();
-      } catch {
-        /* not supported on this OS version */
-      }
-    }
-    if (native.requestBatteryOptimizationExemption) {
-      try {
-        await native.requestBatteryOptimizationExemption();
+        await native.changeExactNotificationSetting();
       } catch {
         /* not supported on this OS version */
       }
@@ -266,13 +270,12 @@ export async function requestRuntimePermissions(): Promise<PermissionRequestResu
   return {
     notifGranted: health?.notifGranted ?? notifGranted,
     exactAlarmGranted: health?.exactAlarmGranted ?? false,
-    batteryExempt: health?.batteryExempt ?? false,
     cameraGranted,
   };
 }
 
 export interface AlarmHealthIssue {
-  key: 'notifGranted' | 'exactAlarmGranted' | 'batteryExempt' | 'staleReschedule';
+  key: 'notifGranted' | 'exactAlarmGranted' | 'staleReschedule';
   messageAr: string;
   actionAr: string;
 }
@@ -300,14 +303,6 @@ export function describeAlarmHealthIssues(
       key: 'exactAlarmGranted',
       messageAr: 'التنبيهات الدقيقة غير مسموح بها، وقد تتأخر التذكيرات عند نوم الهاتف.',
       actionAr: 'من إعدادات الهاتف: التطبيقات ← Health Tracker ← التنبيهات والتذكيرات ← السماح بالمنبّهات الدقيقة.',
-    });
-  }
-
-  if (!health.batteryExempt) {
-    issues.push({
-      key: 'batteryExempt',
-      messageAr: 'تحسين البطارية قد يؤجل التذكيرات لأن الهاتف يوقف التطبيق في وضع السكون.',
-      actionAr: 'اسمح للتطبيق بالعمل في الخلفية دون قيود من إعدادات البطارية.',
     });
   }
 
