@@ -6,6 +6,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { handleCors } from '../lib/cors';
 
 interface ScanBody {
   imageBase64: string;
@@ -16,6 +17,7 @@ const AI_DISCLAIMER =
   'هذه المعلومات مُنشأة بواسطة ذكاء اصطناعي. تحقق منها دائمًا مع الطبيب أو الصيدلي.';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

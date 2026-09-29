@@ -12,6 +12,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../lib/db';
 import { applyMutation } from '../lib/sync';
+import { handleCors } from '../lib/cors';
 import type { SyncEnvelope } from '../../src/core/db/schema';
 
 interface Mutation {
@@ -123,6 +124,7 @@ function sanitiseForTable(
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

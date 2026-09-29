@@ -14,6 +14,7 @@
  */
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { handleCors } from '../lib/cors';
 
 const AI_DISCLAIMER =
   'هذا التلخيص مُنشأ بواسطة ذكاء اصطناعي وليس تشخيصًا طبيًا. راجع الطبيب المعالج دائمًا.';
@@ -88,6 +89,7 @@ async function geminiSummarise(opts: {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }

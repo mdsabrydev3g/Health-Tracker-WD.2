@@ -7,6 +7,7 @@
 
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../lib/db';
+import { handleCors } from '../lib/cors';
 
 interface PullBody {
   deviceId: string;
@@ -48,6 +49,7 @@ function snakeToCamel(obj: Record<string, unknown>): Record<string, unknown> {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (handleCors(req, res)) return;
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
   }
