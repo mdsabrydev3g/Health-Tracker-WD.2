@@ -24,7 +24,7 @@ import {
   refreshAlarmHealth,
   requestRuntimePermissions,
 } from '@/core/notify/scheduler';
-import { setCaregiverPin } from '@/modes/mother/CaregiverPinDialog';
+import { setCaregiverPin, hasCaregiverPin } from '@/modes/mother/CaregiverPinDialog';
 
 export function Settings() {
   const settings = useApp((s) => s.settings);
@@ -39,6 +39,8 @@ export function Settings() {
   const [pinConfirm, setPinConfirm] = useState('');
   const [checking, setChecking] = useState(false);
   const [requesting, setRequesting] = useState(false);
+  /** True when the PIN dialog was opened as a prerequisite for Mother Mode. */
+  const [pendingMotherMode, setPendingMotherMode] = useState(false);
 
   const issues = device?.alarmHealth ? describeAlarmHealthIssues(device.alarmHealth) : [];
 
@@ -101,7 +103,29 @@ export function Settings() {
       setPinOpen(false);
       setNewPin('');
       setPinConfirm('');
+      // If the user was trying to enter Mother Mode, finish that switch now
+      // that a PIN exists to get back out with.
+      if (pendingMotherMode) {
+        setPendingMotherMode(false);
+        await useApp.getState().switchMode('mother');
+      }
     }
+  };
+
+  /**
+   * Switching INTO Mother Mode without a PIN is a one-way trap: the exit dialog
+   * has nothing to verify against, so no PIN would ever be accepted. Require a
+   * PIN first instead of silently creating that trap.
+   */
+  const changeMode = async (mode: 'caregiver' | 'mother') => {
+    if (mode === 'mother' && !hasCaregiverPin()) {
+      setPendingMotherMode(true);
+      setNewPin('');
+      setPinConfirm('');
+      setPinOpen(true);
+      return;
+    }
+    await useApp.getState().switchMode(mode);
   };
 
   return (
@@ -177,7 +201,7 @@ export function Settings() {
           </p>
           <Select
             value={settings.activeMode}
-            onValueChange={(v) => void setSettings({ activeMode: v as 'caregiver' | 'mother' })}
+            onValueChange={(v) => void changeMode(v as 'caregiver' | 'mother')}
           >
             <SelectTrigger>
               <SelectValue />
@@ -383,11 +407,23 @@ export function Settings() {
         </CardContent>
       </Card>
 
-      <Dialog open={pinOpen} onOpenChange={setPinOpen}>
+      <Dialog
+        open={pinOpen}
+        onOpenChange={(o) => {
+          setPinOpen(o);
+          if (!o) setPendingMotherMode(false);
+        }}
+      >
         <DialogContent className="max-w-sm">
           <DialogHeader>
-            <DialogTitle>تغيير الرقم السري</DialogTitle>
+            <DialogTitle>{pendingMotherMode ? 'اضبط رقمًا سريًا أولاً' : 'تغيير الرقم السري'}</DialogTitle>
           </DialogHeader>
+          {pendingMotherMode && (
+            <p className="text-sm leading-relaxed text-muted-foreground">
+              وضع الوالدة يقفل التطبيق على شاشة واحدة، ولا يمكن الخروج منه إلا بالرقم السري.
+              اضبط رقمًا الآن حتى لا يبقى التطبيق مقفولًا.
+            </p>
+          )}
           <div className="space-y-3">
             <div className="space-y-2">
               <Label htmlFor="np">الرقم الجديد</Label>
